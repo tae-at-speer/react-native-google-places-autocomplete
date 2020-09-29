@@ -82,7 +82,7 @@ export default class GooglePlacesAutocomplete extends Component {
   }
 
   getInitialState = () => ({
-    text: this.props.getDefaultValue(),
+    text: this.props.value !== undefined ? this.props.value : this.props.getDefaultValue(),
     dataSource: this.buildRowsFromResults([]),
     listViewDisplayed:
       this.props.listViewDisplayed === 'auto'
@@ -355,12 +355,12 @@ export default class GooglePlacesAutocomplete extends Component {
       request.open(
         'GET',
         `${this.state.url}/place/details/json?` +
-          Qs.stringify({
-            key: this.props.query.key,
-            placeid: rowData.place_id,
-            language: this.props.query.language,
-            ...this.props.GooglePlacesDetailsQuery,
-          }),
+        Qs.stringify({
+          key: this.props.query.key,
+          placeid: rowData.place_id,
+          language: this.props.query.language,
+          ...this.props.GooglePlacesDetailsQuery,
+        }),
       );
 
       request.withCredentials = this.requestShouldUseWithCredentials();
@@ -566,9 +566,9 @@ export default class GooglePlacesAutocomplete extends Component {
               const results =
                 this.props.nearbyPlacesAPI === 'GoogleReverseGeocoding'
                   ? this._filterResultsByTypes(
-                      responseJSON.predictions,
-                      this.props.filterReverseGeocodingByTypes,
-                    )
+                    responseJSON.predictions,
+                    this.props.filterReverseGeocodingByTypes,
+                  )
                   : responseJSON.predictions;
 
               this._results = results;
@@ -593,12 +593,13 @@ export default class GooglePlacesAutocomplete extends Component {
       if (this.props.preProcess) {
         text = this.props.preProcess(text);
       }
+      
       request.open(
         'GET',
         `${this.state.url}/place/autocomplete/json?&input=` +
-          encodeURIComponent(text) +
-          '&' +
-          Qs.stringify(this.props.query),
+        encodeURIComponent(text) +
+        '&' +
+        Qs.stringify(this.props.query),
       );
 
       request.withCredentials = this.requestShouldUseWithCredentials();
@@ -629,7 +630,9 @@ export default class GooglePlacesAutocomplete extends Component {
 
   _handleChangeText = (text) => {
     this._onChangeText(text);
-
+    if (this.props.setAddress) {
+      this.props.setAddress(text);
+    }
     const onChangeText =
       this.props &&
       this.props.textInputProps &&
@@ -637,6 +640,9 @@ export default class GooglePlacesAutocomplete extends Component {
 
     if (onChangeText) {
       onChangeText(text);
+    }
+    if (this.props.setAddressData) {
+      this.props.setAddressData(this.state.dataSource);
     }
   };
 
@@ -808,6 +814,7 @@ export default class GooglePlacesAutocomplete extends Component {
   _getFlatList = () => {
     const keyGenerator = () => Math.random().toString(36).substr(2, 10);
 
+
     if (
       this.supportedPlatform() &&
       (this.state.text !== '' ||
@@ -843,6 +850,14 @@ export default class GooglePlacesAutocomplete extends Component {
 
     return null;
   };
+
+  _setAddressData = () => {
+    console.log("FLAT LIST DATA")
+    console.log(this.state.dataSource);
+    if (this.props.setAddressData) {
+      this.props.setAddressData(this.state.dataSource);
+    }
+  }
   render() {
     let {
       onFocus,
@@ -880,25 +895,41 @@ export default class GooglePlacesAutocomplete extends Component {
                 this.props.suppressDefaultStyles ? {} : defaultStyles.textInput,
                 this.props.styles.textInput,
               ]}
-              value={this.state.text}
+              value={this.props.value !== undefined ? this.props.value : this.state.text}
               placeholder={this.props.placeholder}
               onSubmitEditing={this.props.onSubmitEditing}
               placeholderTextColor={this.props.placeholderTextColor}
               onFocus={
                 onFocus
                   ? () => {
-                      this._onFocus();
-                      onFocus();
+                    if (this.props.focusTextInput) {
+                      this.props.focusTextInput();
                     }
-                  : this._onFocus
+                    this._onFocus();
+                    onFocus();
+                  }
+                  : () => {
+                    this._onFocus();
+                    if (this.props.focusTextInput) {
+                      this.props.focusTextInput();
+                    }
+                  }
               }
               onBlur={
                 onBlur
                   ? () => {
-                      this._onBlur();
-                      onBlur();
+                    if (this.props.blurTextInput) {
+                      this.props.blurTextInput();
                     }
-                  : this._onBlur
+                    this._onBlur();
+                    onBlur();
+                  }
+                  : () => {
+                    if (this.props.blurTextInput) {
+                      this.props.blurTextInput();
+                    }
+                    this._onBlur();
+                  }
               }
               underlineColorAndroid={this.props.underlineColorAndroid}
               clearButtonMode={
@@ -910,7 +941,7 @@ export default class GooglePlacesAutocomplete extends Component {
             {this._renderRightButton()}
           </View>
         )}
-        {this._getFlatList()}
+        {!this.props.hideRow && this._getFlatList()}
         {this.props.children}
       </View>
     );
@@ -929,6 +960,7 @@ GooglePlacesAutocomplete.propTypes = {
   fetchDetails: PropTypes.bool,
   filterReverseGeocodingByTypes: PropTypes.array,
   getDefaultValue: PropTypes.func,
+  value: PropTypes.string,
   GooglePlacesDetailsQuery: PropTypes.object,
   GooglePlacesSearchQuery: PropTypes.object,
   GoogleReverseGeocodingQuery: PropTypes.object,
@@ -964,6 +996,11 @@ GooglePlacesAutocomplete.propTypes = {
   textInputProps: PropTypes.object,
   timeout: PropTypes.number,
   underlineColorAndroid: PropTypes.string,
+  setAddress: PropTypes.func,
+  setAddressData: PropTypes.func,
+  hideRow: PropTypes.bool,
+  focusTextInput: PropTypes.func,
+  blurTextInput: PropTypes.func
 };
 
 GooglePlacesAutocomplete.defaultProps = {
@@ -991,10 +1028,10 @@ GooglePlacesAutocomplete.defaultProps = {
   minLength: 0,
   nearbyPlacesAPI: 'GooglePlacesSearch',
   numberOfLines: 1,
-  onFail: () => {},
-  onNotFound: () => {},
-  onSubmitEditing: () => {},
-  onPress: () => {},
+  onFail: () => { },
+  onNotFound: () => { },
+  onSubmitEditing: () => { },
+  onPress: () => { },
   onTimeout: () => console.warn('google places autocomplete: request timeout'),
   placeholder: 'Search',
   placeholderTextColor: '#A8A8A8',
